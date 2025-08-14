@@ -51,6 +51,10 @@ function validateShoePayload(payload, { requireAllFields = true } = {}) {
   return errors;
 }
 
+function mapPriceToNumber(shoe) {
+  return shoe ? { ...shoe, price: typeof shoe.price === 'object' && shoe.price !== null && 'toNumber' in shoe.price ? shoe.price.toNumber() : shoe.price } : shoe;
+}
+
 export const listShoes = async (req, res, next) => {
   try {
     const { brand, category, color, minPrice, maxPrice, q } = req.query;
@@ -80,7 +84,7 @@ export const listShoes = async (req, res, next) => {
     });
 
     const mapped = shoes.map(s => ({
-      ...s,
+      ...mapPriceToNumber(s),
       images: s.images.map(i => i.url)
     }));
 
@@ -115,7 +119,8 @@ export const createShoe = async (req, res, next) => {
       include: { images: true }
     });
 
-    res.status(201).json({ data: { ...created, images: created.images.map(i => i.url) } });
+    const mapped = { ...mapPriceToNumber(created), images: created.images.map(i => i.url) };
+    res.status(201).json({ data: mapped });
   } catch (err) { next(err); }
 };
 
@@ -126,7 +131,7 @@ export const getShoe = async (req, res, next) => {
     if (!shoe) {
       return res.status(404).json({ error: 'Shoe not found' });
     }
-    res.status(200).json({ data: { ...shoe, images: shoe.images.map(i => i.url) } });
+    res.status(200).json({ data: { ...mapPriceToNumber(shoe), images: shoe.images.map(i => i.url) } });
   } catch (err) { next(err); }
 };
 
@@ -170,7 +175,7 @@ export const updateShoe = async (req, res, next) => {
 
     const finalShoe = await prisma.shoe.findUnique({ where: { id }, include: { images: true } });
 
-    res.status(200).json({ data: { ...finalShoe, images: finalShoe.images.map(i => i.url) } });
+    res.status(200).json({ data: { ...mapPriceToNumber(finalShoe), images: finalShoe.images.map(i => i.url) } });
   } catch (err) { next(err); }
 };
 

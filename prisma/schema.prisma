@@ -6,21 +6,21 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
 model Shoe {
-  id          String      @id @default(uuid())
-  name        String
-  brand       String
+  id          String      @id @default(uuid()) @db.Char(36)
+  name        String      @db.VarChar(191)
+  brand       String      @db.VarChar(191)
   size        Float
-  color       String?
-  price       Float
+  color       String?     @db.VarChar(191)
+  price       Decimal     @db.Decimal(10,2)
   stock       Int
   description String?
-  category    String?
-  sku         String?     @unique
+  category    String?     @db.VarChar(191)
+  sku         String?     @unique @db.VarChar(191)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -32,9 +32,9 @@ model Shoe {
 }
 
 model ShoeImage {
-  id        String   @id @default(uuid())
-  url       String
-  shoeId    String
+  id        String   @id @default(uuid()) @db.Char(36)
+  url       String   @db.VarChar(191)
+  shoeId    String   @db.Char(36)
   shoe      Shoe     @relation(fields: [shoeId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
 }
