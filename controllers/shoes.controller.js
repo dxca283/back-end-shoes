@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { createShoeRecord, deleteShoeById, getAllShoes, getShoeById, updateShoeById } from '../data/shoeStore.js';
+import { prisma } from '../data/prismaClient.js';
 
 function validateShoePayload(payload, { requireAllFields = true } = {}) {
   const errors = [];
@@ -51,110 +51,137 @@ function validateShoePayload(payload, { requireAllFields = true } = {}) {
   return errors;
 }
 
-export const listShoes = (req, res) => {
-  const { brand, category, color, minPrice, maxPrice, q } = req.query;
-  let results = getAllShoes();
+export const listShoes = async (req, res, next) => {
+  try {
+    const { brand, category, color, minPrice, maxPrice, q } = req.query;
 
-  if (brand) {
-    results = results.filter(s => s.brand.toLowerCase() === String(brand).toLowerCase());
-  }
-  if (category) {
-    results = results.filter(s => (s.category || '').toLowerCase() === String(category).toLowerCase());
-  }
-  if (color) {
-    results = results.filter(s => (s.color || '').toLowerCase() === String(color).toLowerCase());
-  }
-  if (minPrice !== undefined) {
-    const min = Number(minPrice);
-    if (Number.isFinite(min)) {
-      results = results.filter(s => s.price >= min);
+    const where = {};
+    if (brand) where.brand = { equals: String(brand), mode: 'insensitive' };
+    if (category) where.category = { equals: String(category), mode: 'insensitive' };
+    if (color) where.color = { equals: String(color), mode: 'insensitive' };
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      where.price = {};
+      if (minPrice !== undefined && Number.isFinite(Number(minPrice))) where.price.gte = Number(minPrice);
+      if (maxPrice !== undefined && Number.isFinite(Number(maxPrice))) where.price.lte = Number(maxPrice);
     }
-  }
-  if (maxPrice !== undefined) {
-    const max = Number(maxPrice);
-    if (Number.isFinite(max)) {
-      results = results.filter(s => s.price <= max);
+    if (q) {
+      const needle = String(q);
+      where.OR = [
+        { name: { contains: needle, mode: 'insensitive' } },
+        { brand: { contains: needle, mode: 'insensitive' } },
+        { description: { contains: needle, mode: 'insensitive' } }
+      ];
     }
-  }
-  if (q) {
-    const needle = String(q).toLowerCase();
-    results = results.filter(s =>
-      s.name.toLowerCase().includes(needle) ||
-      s.brand.toLowerCase().includes(needle) ||
-      (s.description || '').toLowerCase().includes(needle)
-    );
-  }
 
-  res.status(200).json({ data: results });
+    const shoes = await prisma.shoe.findMany({
+      where,
+      include: { images: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const mapped = shoes.map(s => ({
+      ...s,
+      images: s.images.map(i => i.url)
+    }));
+
+    res.status(200).json({ data: mapped });
+  } catch (err) { next(err); }
 };
 
-export const createShoe = (req, res) => {
-  const errors = validateShoePayload(req.body, { requireAllFields: true });
-  if (errors.length > 0) {
-    return res.status(400).json({ errors });
-  }
+export const createShoe = async (req, res, next) => {
+  try {
+    const errors = validateShoePayload(req.body, { requireAllFields: true });
+    if (errors.length > 0) {
+      return res.status(400).json({ errors });
+    }
 
-  const shoe = {
-    id: randomUUID(),
-    name: req.body.name.trim(),
-    brand: req.body.brand.trim(),
-    size: req.body.size,
-    color: req.body.color ?? null,
-    price: req.body.price,
-    stock: req.body.stock,
-    description: req.body.description ?? null,
-    category: req.body.category ?? null,
-    images: Array.isArray(req.body.images) ? req.body.images : [],
-    sku: req.body.sku ?? null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
+    const id = randomUUID();
+    const created = await prisma.shoe.create({
+      data: {
+        id,
+        name: req.body.name.trim(),
+        brand: req.body.brand.trim(),
+        size: req.body.size,
+        color: req.body.color ?? null,
+        price: req.body.price,
+        stock: req.body.stock,
+        description: req.body.description ?? null,
+        category: req.body.category ?? null,
+        sku: req.body.sku ?? null,
+        images: {
+          create: Array.isArray(req.body.images) ? req.body.images.map(url => ({ url })) : []
+        }
+      },
+      include: { images: true }
+    });
 
-  createShoeRecord(shoe);
-
-  res.status(201).json({ data: shoe });
+    res.status(201).json({ data: { ...created, images: created.images.map(i => i.url) } });
+  } catch (err) { next(err); }
 };
 
-export const getShoe = (req, res) => {
-  const { id } = req.params;
-  const shoe = getShoeById(id);
-  if (!shoe) {
-    return res.status(404).json({ error: 'Shoe not found' });
-  }
-  res.status(200).json({ data: shoe });
+export const getShoe = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const shoe = await prisma.shoe.findUnique({ where: { id }, include: { images: true } });
+    if (!shoe) {
+      return res.status(404).json({ error: 'Shoe not found' });
+    }
+    res.status(200).json({ data: { ...shoe, images: shoe.images.map(i => i.url) } });
+  } catch (err) { next(err); }
 };
 
-export const updateShoe = (req, res) => {
-  const { id } = req.params;
-  const existing = getShoeById(id);
-  if (!existing) {
-    return res.status(404).json({ error: 'Shoe not found' });
-  }
+export const updateShoe = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.shoe.findUnique({ where: { id }, include: { images: true } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Shoe not found' });
+    }
 
-  const errors = validateShoePayload(req.body, { requireAllFields: false });
-  if (errors.length > 0) {
-    return res.status(400).json({ errors });
-  }
+    const errors = validateShoePayload(req.body, { requireAllFields: false });
+    if (errors.length > 0) {
+      return res.status(400).json({ errors });
+    }
 
-  const updated = {
-    ...existing,
-    ...req.body,
-    name: req.body.name !== undefined ? String(req.body.name).trim() : existing.name,
-    brand: req.body.brand !== undefined ? String(req.body.brand).trim() : existing.brand,
-    images: req.body.images !== undefined ? (Array.isArray(req.body.images) ? req.body.images : existing.images) : existing.images,
-    updatedAt: new Date().toISOString()
-  };
+    const updateData = {
+      name: req.body.name !== undefined ? String(req.body.name).trim() : undefined,
+      brand: req.body.brand !== undefined ? String(req.body.brand).trim() : undefined,
+      size: req.body.size !== undefined ? req.body.size : undefined,
+      color: req.body.color !== undefined ? req.body.color : undefined,
+      price: req.body.price !== undefined ? req.body.price : undefined,
+      stock: req.body.stock !== undefined ? req.body.stock : undefined,
+      description: req.body.description !== undefined ? req.body.description : undefined,
+      category: req.body.category !== undefined ? req.body.category : undefined,
+      sku: req.body.sku !== undefined ? req.body.sku : undefined,
+    };
 
-  updateShoeById(id, updated);
-  res.status(200).json({ data: updated });
+    const updated = await prisma.shoe.update({
+      where: { id },
+      data: updateData,
+      include: { images: true }
+    });
+
+    if (req.body.images !== undefined) {
+      await prisma.shoeImage.deleteMany({ where: { shoeId: id } });
+      if (Array.isArray(req.body.images) && req.body.images.length > 0) {
+        await prisma.shoeImage.createMany({ data: req.body.images.map(url => ({ url, shoeId: id })) });
+      }
+    }
+
+    const finalShoe = await prisma.shoe.findUnique({ where: { id }, include: { images: true } });
+
+    res.status(200).json({ data: { ...finalShoe, images: finalShoe.images.map(i => i.url) } });
+  } catch (err) { next(err); }
 };
 
-export const deleteShoe = (req, res) => {
-  const { id } = req.params;
-  const existing = getShoeById(id);
-  if (!existing) {
-    return res.status(404).json({ error: 'Shoe not found' });
-  }
-  deleteShoeById(id);
-  res.status(204).send();
+export const deleteShoe = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const existing = await prisma.shoe.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Shoe not found' });
+    }
+    await prisma.shoe.delete({ where: { id } });
+    res.status(204).send();
+  } catch (err) { next(err); }
 };
