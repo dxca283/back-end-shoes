@@ -1,8 +1,8 @@
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/env.js";
-import db from "../database/db_connection.js";
+import connectToDatabase from "../database/db_connection.js";
 
-export const authorize = (req, res, next) => {
+export const authorize = async (req, res, next) => {
   try {
     let token;
 
@@ -12,33 +12,33 @@ export const authorize = (req, res, next) => {
     ) {
       token = req.headers.authorization.split(" ")[1];
     }
+
     if (!token) {
       return res.status(401).json({ message: "No token" });
     }
 
+    // Giải mã token
     const decoded = jwt.verify(token, JWT_SECRET);
     const userId = decoded.id;
 
-    db.query(
+    // Kết nối DB
+    const db = await connectToDatabase();
+
+    // Query (mysql2/promise trả về [rows, fields])
+    const [rows] = await db.query(
       "SELECT id, username, role FROM users WHERE id = ? LIMIT 1",
-      [userId],
-      (err, results) => {
-        if (err) {
-          console.error("DB error:", err);
-          return res.status(500).json({ message: "Internal server error" });
-        }
-
-        if (results.length === 0) {
-          return res
-            .status(401)
-            .json({ message: "Unauthorized: User not found" });
-        }
-
-        req.user = results[0]; 
-        next();
-      }
+      [userId]
     );
+
+    if (rows.length === 0) {
+      return res.status(401).json({ message: "Unauthorized: User not found" });
+    }
+
+    // Gắn user vào request để các route sau dùng
+    req.user = rows[0];
+    next();
   } catch (error) {
+    console.error("Authorize error:", error);
     res.status(401).json({ message: "Unauthorized", error: error.message });
   }
 };

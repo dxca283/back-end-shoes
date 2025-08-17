@@ -7,8 +7,7 @@ const userRouter = Router();
 
 
 userRouter.get('/', authorize ,getUsers);
-userRouter.get('/:id', getUserById);
-
+userRouter.get('/:id', authorize ,getUserById);
 
 
 export default userRouter;

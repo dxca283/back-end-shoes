@@ -1,17 +1,23 @@
-import mysql from 'mysql2';
+import mysql from "mysql2/promise";
+import { NODE_ENV } from "../config/env.js";
+let connection;
 
-const connection = mysql.createConnection({
-    host: 'localhost',
-    user: 'goat_mem',
-    password: '123456',
-    database: 'db_project_trainer'
-})
-
-connection.connect((err) => {
-    if (err) {
-        console.error('Error connecting to the database:', err);
-        return;
+const connectToDatabase = async () => {
+  try {
+    if (!connection) {
+      connection = await mysql.createConnection({
+        host: "localhost",
+        user: "goat_mem",
+        password: "123456",
+        database: "db_project_trainer",
+      });
+      console.log(`✅ Connected to MySQL Database in ${NODE_ENV} mode`);
     }
-    console.log('Connected to the database successfully!');
-});
-export default connection;
+    return connection;
+  } catch (error) {
+    console.error("❌ Error connecting to Database:", error);
+    process.exit(1);
+  }
+};
+
+export default connectToDatabase;
