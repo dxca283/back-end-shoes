@@ -2,6 +2,7 @@ import connectToDatabase from "../database/db_connection.js";
 
 export const getUsers = async (req, res) => {
   try {
+    
     const db = await connectToDatabase();
 
     const [rows] = await db.query(
@@ -16,12 +17,11 @@ export const getUsers = async (req, res) => {
   }
 };
 
-
-
 export const getUserById = async (req, res) => {
   try {
+    
     const { id } = req.params;
-    const db = await connectToDatabase(); 
+    const db = await connectToDatabase();
 
     const [rows] = await db.query(
       `SELECT id, username, full_name, email, phone, address, role, created_at
