@@ -6,11 +6,14 @@ import connectToDatabase from './database/db_connection.js';
 import productRouter from './routes/product.routes.js';
 import categoryRouter from './routes/category.routes.js';
 import orderRouter from './routes/order.routes.js';
+import arcjetMiddleware from './middlewares/arcjet.middleware.js';
 const app = express();
 
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(arcjetMiddleware);
+
 
 
 app.use('/api/v1/users', userRouter);
